@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Registered DermaAI user profile and privacy preferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "role": { "type": "string", "enum": ["patient", "admin"] },
+        "ageRange": { "type": "string", "maxLength": 32 },
+        "defaultRetentionDays": { "type": "integer" },
+        "allowImageStorage": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "defaultRetentionDays", "allowImageStorage", "createdAt", "updatedAt"]
+    },
+    "Assessment": {
+      "title": "Assessment",
+      "description": "Informational skin lesion assessment record (not a medical diagnosis).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "status": { "type": "string", "enum": ["demonstration_mode", "completed_validated", "rejected_quality", "model_unavailable"] },
+        "bodyLocation": { "type": "string", "maxLength": 120 },
+        "ageRange": { "type": "string", "maxLength": 32 },
+        "durationPresent": { "type": "string", "maxLength": 64 },
+        "hasChanged": { "type": "string", "maxLength": 64 },
+        "symptoms": { "type": "array" },
+        "personalHistory": { "type": "string", "maxLength": 500 },
+        "consentAccepted": { "type": "boolean" },
+        "imageStored": { "type": "boolean" },
+        "modelVersion": { "type": "string", "maxLength": 64 },
+        "classificationAvailable": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "status", "consentAccepted", "imageStored", "modelVersion", "classificationAvailable", "createdAt", "updatedAt"]
+    },
+    "Article": {
+      "title": "Article",
+      "description": "Medically reviewed educational skin health article.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 3, "maxLength": 180 },
+        "category": { "type": "string", "maxLength": 64 },
+        "summary": { "type": "string", "maxLength": 500 },
+        "content": { "type": "string", "maxLength": 10000 },
+        "medicalSource": { "type": "string", "maxLength": 200 },
+        "publishedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "category", "summary", "content", "medicalSource", "publishedAt"]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "User contact or feedback submission.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "subject": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "message": { "type": "string", "minLength": 5, "maxLength": 3000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "subject", "message", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile and privacy retention preferences."
+    },
+    "/assessments/{assessmentId}": {
+      "schema": { "$ref": "#/entities/Assessment" },
+      "description": "User-owned informational lesion assessment records."
+    },
+    "/articles/{articleId}": {
+      "schema": { "$ref": "#/entities/Article" },
+      "description": "Publicly readable educational skin health articles managed by admins."
+    },
+    "/contactMessages/{messageId}": {
+      "schema": { "$ref": "#/entities/ContactMessage" },
+      "description": "Contact and feedback messages readable only by administrators."
+    }
+  }
+}

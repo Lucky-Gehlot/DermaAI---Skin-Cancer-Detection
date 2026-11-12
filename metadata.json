@@ -1,0 +1,6 @@
+{
+  "name": "DermaAI",
+  "description": "AI-assisted skin health and lesion risk assessment platform designed to help users understand potential risks, learn ABCDE warning signs, and know when to seek professional dermatological care.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

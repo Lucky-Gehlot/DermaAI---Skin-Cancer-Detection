@@ -1,0 +1,186 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Global Security Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'luckygehlot1400@gmail.com'
+      );
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'defaultRetentionDays', 'allowImageStorage', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'ageRange', 'defaultRetentionDays', 'allowImageStorage', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.role in ['patient', 'admin']
+        && (!('ageRange' in data) || (data.ageRange is string && data.ageRange.size() <= 32))
+        && data.defaultRetentionDays is int && data.defaultRetentionDays >= 0 && data.defaultRetentionDays <= 3650
+        && data.allowImageStorage is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAssessment(data) {
+      return data.keys().hasAll(['id', 'userId', 'status', 'consentAccepted', 'imageStored', 'modelVersion', 'classificationAvailable', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'userId', 'status', 'bodyLocation', 'ageRange', 'durationPresent',
+          'hasChanged', 'symptoms', 'personalHistory', 'consentAccepted', 'imageStored',
+          'modelVersion', 'classificationAvailable', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.status in ['demonstration_mode', 'completed_validated', 'rejected_quality', 'model_unavailable']
+        && (!('bodyLocation' in data) || (data.bodyLocation is string && data.bodyLocation.size() <= 120))
+        && (!('ageRange' in data) || (data.ageRange is string && data.ageRange.size() <= 32))
+        && (!('durationPresent' in data) || (data.durationPresent is string && data.durationPresent.size() <= 64))
+        && (!('hasChanged' in data) || (data.hasChanged is string && data.hasChanged.size() <= 64))
+        && (!('symptoms' in data) || (data.symptoms is list && data.symptoms.size() <= 12 && (data.symptoms.size() == 0 || data.symptoms[0] is string)))
+        && (!('personalHistory' in data) || (data.personalHistory is string && data.personalHistory.size() <= 500))
+        && data.consentAccepted is bool
+        && data.imageStored is bool
+        && data.modelVersion is string && data.modelVersion.size() >= 1 && data.modelVersion.size() <= 64
+        && data.classificationAvailable is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidArticle(data) {
+      return data.keys().hasAll(['id', 'title', 'category', 'summary', 'content', 'medicalSource', 'publishedAt'])
+        && data.keys().hasOnly(['id', 'title', 'category', 'summary', 'content', 'medicalSource', 'publishedAt'])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 180
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 64
+        && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 10000
+        && data.medicalSource is string && data.medicalSource.size() >= 1 && data.medicalSource.size() <= 200
+        && data.publishedAt is timestamp;
+    }
+
+    function isValidContactMessage(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'subject', 'message', 'createdAt'])
+        && data.keys().hasOnly(['id', 'name', 'email', 'subject', 'message', 'createdAt'])
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 180
+        && data.message is string && data.message.size() >= 5 && data.message.size() <= 3000
+        && data.createdAt is timestamp;
+    }
+
+    // 4. Collection Rules
+
+    match /admins/{adminId} {
+      allow get: if isVerifiedUser() && isValidId(adminId) && request.auth.uid == adminId;
+      allow list, create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().role == 'patient'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'ageRange', 'defaultRetentionDays', 'allowImageStorage', 'updatedAt'])) ||
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+
+    match /assessments/{assessmentId} {
+      allow get: if isSignedIn() && isValidId(assessmentId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(assessmentId)
+        && isValidAssessment(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().id == assessmentId
+        && incoming().consentAccepted == true
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(assessmentId)
+        && isValidAssessment(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['imageStored', 'updatedAt']);
+      allow delete: if isVerifiedUser() && isValidId(assessmentId) && existing().userId == request.auth.uid;
+    }
+
+    match /articles/{articleId} {
+      allow get: if isValidId(articleId);
+      allow list: if true;
+      allow create: if isAdmin()
+        && isValidId(articleId)
+        && isValidArticle(incoming())
+        && incoming().id == articleId
+        && incoming().publishedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(articleId)
+        && isValidArticle(incoming())
+        && incoming().id == existing().id
+        && incoming().publishedAt == existing().publishedAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'summary', 'content', 'medicalSource']);
+      allow delete: if isAdmin() && isValidId(articleId);
+    }
+
+    match /contactMessages/{messageId} {
+      allow get: if isAdmin() && isValidId(messageId);
+      allow list: if isAdmin();
+      allow create: if isValidId(messageId)
+        && isValidContactMessage(incoming())
+        && incoming().id == messageId
+        && incoming().createdAt == request.time;
+      allow update, delete: if isAdmin() && isValidId(messageId);
+    }
+  }
+}
